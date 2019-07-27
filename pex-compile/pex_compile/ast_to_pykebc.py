@@ -83,6 +83,17 @@ class Compiler(object):
                 return
         raise Exception(f'Unimplemented expression type: {type(tree)}')
 
+    def visit_dict(self, tree):
+        assert isinstance(tree, ast.Dict)
+        for key, value in zip(tree.keys, tree.values):
+            if key is None:
+                self.visit_expr(value)
+                self.code.add('unpack', 'dict')
+            else:
+                self.visit_expr(key)
+                self.visit_expr(value)
+        self.code.add('make_struct', ('dict', len(tree.keys)))
+
     def visit_if_exp(self, tree):
         assert isinstance(tree, ast.IfExp)
         self.visit_expr(tree.test)
