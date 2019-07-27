@@ -50,29 +50,29 @@ class Compiler(object):
             return
 
         type_table = [
-            #(ast.Attribute,     self.visit_attribute),
+            (ast.Attribute,     self.visit_attribute),
             (ast.BinOp,         self.visit_bin_op),
             (ast.BoolOp,        self.visit_bool_op),
             (ast.Bytes,         self.visit_bytes),
             (ast.Call,          self.visit_call),
             (ast.Compare,       self.visit_compare),
-            #(ast.Dict,          self.visit_dict),
+            (ast.Dict,          self.visit_dict),
             #(ast.DictComp,      self.visit_dict_comp),
             #(ast.Ellipsis,      self.visit_ellipsis),
             #(ast.FormattedStr,  self.visit_formatted_str),
             #(ast.GeneratorExp,  self.visit_generator_exp),
-            #(ast.IfExp,         self.visit_if_exp),
+            (ast.IfExp,         self.visit_if_exp),
             #(ast.JoinedStr,     self.visit_joined_str),
             (ast.List,          self.visit_list),
             #(ast.ListComp,      self.visit_list_comp),
             (ast.Name,          self.visit_name),
-            #(ast.NameConstant,  self.visit_name_constant),
+            (ast.NameConstant,  self.visit_name_constant),
             (ast.Num,           self.visit_num),
             (ast.Set,           self.visit_set),
             #(ast.SetComp,       self.visit_set_comp),
             (ast.Starred,       self.visit_starred),
             (ast.Str,           self.visit_str),
-            #(ast.Subscript,     self.visit_subscript),
+            (ast.Subscript,     self.visit_subscript),
             (ast.Tuple,         self.visit_tuple),
             (ast.UnaryOp,       self.visit_unary_op),
         ]
@@ -83,10 +83,52 @@ class Compiler(object):
                 return
         raise Exception(f'Unimplemented expression type: {type(tree)}')
 
+    def visit_if_exp(self, tree):
+        assert isinstance(tree, ast.IfExp)
+        self.visit_expr(tree.test)
+        false_label = self.code.new_label()
+        exit_label = self.code.new_label()
+        self.code.add('cjump', (False, True, false_label))
+        self.visit_expr(tree.body)
+        self.code.add('jump', exit_label)
+        self.code.add_label(false_label)
+        self.visit_expr(tree.orelse)
+        self.code.add_label(exit_label)
+
+    def visit_subscript(self, tree):
+        assert isinstance(tree, ast.Subscript)
+        if isinstance(tree.slice, ast.Index):
+            self.visit_subscript_index(tree)
+        elif isinstance(tree.slice, ast.Slice):
+            self.visit_subscript_slice(tree)
+        elif isinstance(tree.slice, ast.ExtSlice):
+            self.visit_subscript_ext_slice(tree)
+        else:
+            raise Exception(f'Unimplemented slice type: {type(tree.slice)}')
+
+    visit_subscript_slice = NotImplemented
+    visit_subscript_ext_slice = NotImplemented
+
+    def visit_subscript_index(self, tree):
+        assert isinstance(tree, ast.Subscript)
+        assert isinstance(tree.slice, ast.Index)
+        self.visit_expr(tree.value)
+        self.visit_expr(tree.slice.value)
+        self.code.add('index', None)
+
+    def visit_name_constant(self, tree):
+        assert isinstance(tree, ast.NameConstant)
+        self.code.add_const(tree.value)
+
     def visit_starred(self, tree):
         assert isinstance(tree, ast.Starred)
         self.visit_expr(tree.value)
         self.code.add('unpack', 'iterable')
+
+    def visit_attribute(self, tree):
+        assert isinstance(tree, ast.Attribute)
+        self.visit_expr(tree.value)
+        self.code.add('load_attribute', self.code.get_const_id(tree.attr))
 
     visit_extended_call = NotImplemented
 

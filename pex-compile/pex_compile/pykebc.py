@@ -13,12 +13,15 @@ class Code(object):
         label_name = f'L{self.label_counter}'
         self.label_counter += 1
         return label_name
-    
-    def add_const(self, const):
+
+    def get_const_id(self, const):
         if cid(const) not in self.reverse_constants:
             self.reverse_constants[cid(const)] = len(self.constants)
             self.constants.append(const)
-        self.add('load_const', self.reverse_constants[cid(const)])
+        return self.reverse_constants[cid(const)]
+    
+    def add_const(self, const):     # const is the constant itself! Not its ID
+        self.add('load_const', self.get_const_id(const))
 
     def add(self, command, argument):
         self.commands.append((command, argument))
