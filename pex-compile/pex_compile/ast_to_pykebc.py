@@ -15,7 +15,7 @@ class Compiler(object):
         type_table = [
             #(ast.AnnAssign,     self.visit_ann_assign),
             #(ast.Assert,        self.visit_assert),
-            #(ast.Assign,        self.visit_assign),
+            (ast.Assign,        self.visit_assign),
             #(ast.AugAssign,     self.visit_aug_assign),
             #(ast.Break,         self.visit_break),
             #(ast.ClassDef,      self.visit_class_def),
@@ -42,6 +42,14 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_assign(self, tree):
+        assert isinstance(tree, ast.Assign)
+        self.visit_expr(tree.value)
+        for i, target in enumerate(tree.targets):
+            if i < len(tree.targets) - 1:
+                self.code.add('stack', 'dup')
+            self.visit_expr(target)
 
     def visit_expr(self, tree):
         if type(tree) is ast.Expr:
@@ -125,7 +133,14 @@ class Compiler(object):
         assert isinstance(tree.slice, ast.Index)
         self.visit_expr(tree.value)
         self.visit_expr(tree.slice.value)
-        self.code.add('index', None)
+        if isinstance(tree.ctx, ast.Load):
+            self.code.add('index', 'get')
+        elif isinstance(tree.ctx, ast.Store):
+            self.code.add('index', 'set')
+        elif isinstance(tree.ctx, ast.Delete):
+            self.code.add('index', 'del')
+        else:
+            raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
     def visit_name_constant(self, tree):
         assert isinstance(tree, ast.NameConstant)
@@ -133,13 +148,25 @@ class Compiler(object):
 
     def visit_starred(self, tree):
         assert isinstance(tree, ast.Starred)
-        self.visit_expr(tree.value)
-        self.code.add('unpack', 'iterable')
+        if isinstance(tree.ctx, ast.Load):
+            self.visit_expr(tree.value)
+            self.code.add('unpack', 'iterable')
+        elif isinstance(tree.ctx, ast.Store):
+            self.visit_name(tree.value)
+        else:
+            raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
     def visit_attribute(self, tree):
         assert isinstance(tree, ast.Attribute)
         self.visit_expr(tree.value)
-        self.code.add('load_attribute', self.code.get_const_id(tree.attr))
+        if isinstance(tree.ctx, ast.Load):
+            self.code.add('attribute', ('get', self.code.get_const_id(tree.attr)))
+        elif isinstance(tree.ctx, ast.Store):
+            self.code.add('attribute', ('set', self.code.get_const_id(tree.attr)))
+        elif isinstance(tree.ctx, ast.Delete):
+            self.code.add('attribute', ('del', self.code.get_const_id(tree.attr)))
+        else:
+            raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
     visit_extended_call = NotImplemented
 
@@ -155,7 +182,14 @@ class Compiler(object):
 
     def visit_name(self, tree):
         assert isinstance(tree, ast.Name)
-        self.code.add('load_name', tree.id)
+        if isinstance(tree.ctx, ast.Load):
+            self.code.add('name', ('load', tree.id))
+        elif isinstance(tree.ctx, ast.Store):
+            self.code.add('name', ('store', tree.id))
+        elif isinstance(tree.ctx, ast.Delete):
+            self.code.add('name', ('del', tree.id))
+        else:
+            raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
     def visit_num(self, tree):
         assert isinstance(tree, ast.Num)
@@ -167,15 +201,31 @@ class Compiler(object):
 
     def visit_tuple(self, tree):
         assert isinstance(tree, ast.Tuple)
-        for element in tree.elts:
-            self.visit_expr(element)
-        self.code.add('make_struct', ('tuple', len(tree.elts)))
+        if isinstance(tree.ctx, ast.Load):
+            for element in tree.elts:
+                self.visit_expr(element)
+            self.code.add('make_struct', ('tuple', len(tree.elts)))
+        elif isinstance(tree.ctx, ast.Store):
+            self.code.add('unpack', 'list')
+            self.code.add('unpacked_operation', ('assign', len(tree.elts)))
+        elif isinstance(tree.ctx, ast.Delete):
+            self.code.add('name', ('del', tree.value))
+            self.code.add('unpacked_operation', ('del', len(tree.elts)))
+        else:
+            raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
     def visit_list(self, tree):
         assert isinstance(tree, ast.List)
-        for element in tree.elts:
-            self.visit_expr(element)
-        self.code.add('make_struct', ('list', len(tree.elts)))
+        if isinstance(tree.ctx, ast.Load):
+            for element in tree.elts:
+                self.visit_expr(element)
+            self.code.add('make_struct', ('list', len(tree.elts)))
+        elif isinstance(tree.ctx, ast.Store):
+            self.code.add('unpack', 'list')
+            self.code.add('unpacked_operation', ('assign', len(tree.elts)))
+        elif isinstance(tree.ctx, ast.Delete):
+            self.code.add('name', ('del', tree.value))
+            self.code.add('unpacked_operation', ('del', len(tree.elts)))
 
     def visit_set(self, tree):
         assert isinstance(tree, ast.Set)
