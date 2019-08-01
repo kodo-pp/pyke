@@ -3,8 +3,34 @@ import ast
 from pex_compile import pykebc
 
 
+class Loop(object):
+    def __init__(self, start_label, else_label, end_label):
+        self.start_label = start_label
+        self.else_label = else_label
+        self.end_label = end_label
+
+
+class ContextManager(object):
+    __slots__ = ['enter', 'exit']
+
+    def __init__(self, enter, exit):
+        self.enter = enter
+        self.exit = exit
+
+    def __enter__(self):
+        self.enter()
+        return self
+
+    def __exit__(self, *args):
+        self.exit(*args)
+
+
 class Compiler(object):
-    __slots__ = ['code']
+    __slots__ = ['code', 'loops']
+
+    def __init__(self):
+        self.code = None
+        self.loops = []
 
     def visit_body(self, body):
         assert isinstance(body, list)
@@ -33,7 +59,7 @@ class Compiler(object):
             #(ast.Raise,         self.visit_raise),
             #(ast.Return,        self.visit_return),
             #(ast.Try,           self.visit_try),
-            #(ast.While,         self.visit_while),
+            (ast.While,         self.visit_while),
             #(ast.With,          self.visit_with),
         ]
 
@@ -42,6 +68,36 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+    
+
+    def enter_loop(self, start_label, else_label, end_label):
+        def enter():
+            self.loops.append(Loop(start_label, else_label, end_label))
+        def exit(*args):
+            self.loops.pop()
+        return ContextManager(enter, exit)
+
+
+    def visit_while(self, tree):
+        assert isinstance(tree, ast.While)
+        start_label = self.code.new_label()
+        else_label = self.code.new_label()
+        end_label = self.code.new_label()
+
+        self.code.add_label(start_label)
+        self.visit_expr(tree.test)
+        self.code.add('cjump', (False, True, else_label))
+
+        with self.enter_loop(start_label, else_label, end_label):
+            self.visit_body(tree.body)
+            self.code.add('jump', start_label)
+
+        self.code.add_label(else_label)
+        self.visit_body(tree.orelse)
+        
+        self.code.add_label(end_label)
+
+    
 
     def visit_if(self, tree):
         assert isinstance(tree, ast.If)
