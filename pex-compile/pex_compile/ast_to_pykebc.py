@@ -48,7 +48,7 @@ class Compiler(object):
             #(ast.Continue,      self.visit_continue),
             #(ast.Delete,        self.visit_delete),
             (ast.Expr,          self.visit_expr),
-            #(ast.For,           self.visit_for),
+            (ast.For,           self.visit_for),
             #(ast.FunctionDef,   self.visit_function_def),
             #(ast.Global,        self.visit_global),
             (ast.If,            self.visit_if),
@@ -72,6 +72,63 @@ class Compiler(object):
     def visit_pass(self, tree):
         assert isinstance(tree, ast.Pass)
         self.code.add('nop', None)
+
+    def visit_for(self, tree):
+        assert isinstance(tree, ast.For)
+        start_label = self.code.new_label()
+        try_label = self.code.new_label()
+        except_label = self.code.new_label()
+        else_label = self.code.new_label()
+        end_label = self.code.new_label()
+        bogus_label = self.code.new_label()
+
+        # Stack: ...
+        self.visit_expr(tree.iter)
+        # Stack: ... expr
+        self.code.add('pseudo_call', 'iter')
+        # Stack: ... iter
+
+        self.code.add_label(start_label)
+        # === REPEATED ===
+        with self.enter_loop(start_label, else_label, end_label):
+            self.code.add('try', try_label)
+            # Stack: ... iter
+            self.code.add('stack', 'dup')
+            # Stack: ... iter iter
+
+            self.code.add('pseudo_call', 'next')
+            # Stack: ... iter element
+            self.code.add('end_try', None)
+
+            # Save the current value into the specified variable/tuple/etc.
+            self.visit_expr(tree.target)
+            # Stack: ... iter
+            
+            self.visit_body(tree.body)
+            self.code.add('jump', start_label)
+
+        self.code.add_label(else_label)
+        # Stack: ... iter
+        self.code.add('stack', 'pop')
+        # Stack: ...
+        self.visit_body(tree.orelse)
+        # Stack: ...
+        self.code.add('jump', end_label)
+    
+        self.code.add_label(try_label)
+        # Stack: ... iter iter exc
+        self.code.add('name', ('load_global', 'StopIteration'))
+        self.code.add('except', except_label)
+        self.code.add('raise', None)
+
+        self.code.add_label(except_label)
+        # Stack: ... iter exc
+        self.code.add('stack', 'pop')
+        # Stack: ... iter
+        self.code.add('jump', else_label)
+
+        self.code.add_label(end_label)
+        # Stack: ...
 
     def enter_loop(self, start_label, else_label, end_label):
         def enter():
