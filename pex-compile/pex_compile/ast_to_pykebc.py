@@ -290,11 +290,13 @@ class Compiler(object):
                 self.visit_expr(element)
             self.code.add('make_struct', ('tuple', len(tree.elts)))
         elif isinstance(tree.ctx, ast.Store):
-            self.code.add('unpack', 'list')
-            self.code.add('unpacked_operation', ('assign', len(tree.elts)))
+            self.code.add('eager_unpack_list', len(tree.elts))
+            for element in reversed(tree.elts):
+                self.visit_expr(element)
         elif isinstance(tree.ctx, ast.Delete):
-            self.code.add('name', ('del', tree.value))
-            self.code.add('unpacked_operation', ('del', len(tree.elts)))
+            self.code.add('eager_unpack_list', len(tree.elts))
+            for element in reversed(tree.elts):
+                self.visit_expr(element)
         else:
             raise Exception(f'Unimplemented context: {type(tree.ctx)}')
 
@@ -305,11 +307,13 @@ class Compiler(object):
                 self.visit_expr(element)
             self.code.add('make_struct', ('list', len(tree.elts)))
         elif isinstance(tree.ctx, ast.Store):
-            self.code.add('unpack', 'list')
-            self.code.add('unpacked_operation', ('assign', len(tree.elts)))
+            self.code.add('eager_unpack_list', len(tree.elts))
+            for element in reversed(tree.elts):
+                self.visit_expr(element)
         elif isinstance(tree.ctx, ast.Delete):
-            self.code.add('name', ('del', tree.value))
-            self.code.add('unpacked_operation', ('del', len(tree.elts)))
+            self.code.add('eager_unpack_list', len(tree.elts))
+            for element in reversed(tree.elts):
+                self.visit_expr(element)
 
     def visit_set(self, tree):
         assert isinstance(tree, ast.Set)
