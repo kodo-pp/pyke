@@ -55,7 +55,7 @@ class Compiler(object):
             #(ast.Import,        self.visit_import),
             #(ast.ImportFrom,    self.visit_import_from),
             #(ast.Nonlocal,      self.visit_nonlocal),
-            #(ast.Pass,          self.visit_pass),
+            (ast.Pass,          self.visit_pass),
             #(ast.Raise,         self.visit_raise),
             #(ast.Return,        self.visit_return),
             #(ast.Try,           self.visit_try),
@@ -68,7 +68,10 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
-    
+
+    def visit_pass(self, tree):
+        assert isinstance(tree, ast.Pass)
+        self.code.add('nop', None)
 
     def enter_loop(self, start_label, else_label, end_label):
         def enter():
@@ -76,7 +79,6 @@ class Compiler(object):
         def exit(*args):
             self.loops.pop()
         return ContextManager(enter, exit)
-
 
     def visit_while(self, tree):
         assert isinstance(tree, ast.While)
@@ -96,8 +98,6 @@ class Compiler(object):
         self.visit_body(tree.orelse)
         
         self.code.add_label(end_label)
-
-    
 
     def visit_if(self, tree):
         assert isinstance(tree, ast.If)
