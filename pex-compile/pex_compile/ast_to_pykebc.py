@@ -6,10 +6,10 @@ from pex_compile import pykebc
 class Compiler(object):
     __slots__ = ['code']
 
-    def visit_module(self, tree):
-        assert isinstance(tree, ast.Module)
-        for node in tree.body:
-            self.visit_statement(node)
+    def visit_body(self, body):
+        assert isinstance(body, list)
+        for tree in body:
+            self.visit_statement(tree)
 
     def visit_statement(self, tree):
         type_table = [
@@ -25,7 +25,7 @@ class Compiler(object):
             #(ast.For,           self.visit_for),
             #(ast.FunctionDef,   self.visit_function_def),
             #(ast.Global,        self.visit_global),
-            #(ast.If,            self.visit_if),
+            (ast.If,            self.visit_if),
             #(ast.Import,        self.visit_import),
             #(ast.ImportFrom,    self.visit_import_from),
             #(ast.Nonlocal,      self.visit_nonlocal),
@@ -42,6 +42,26 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_if(self, tree):
+        assert isinstance(tree, ast.If)
+        false_label = self.code.new_label()
+        exit_label = self.code.new_label()
+
+        # Test
+        self.visit_expr(tree.test)
+        self.code.add('cjump', (False, True, false_label))
+
+        # True branch
+        self.visit_body(tree.body)
+        self.code.add('jump', exit_label)
+
+        # False branch
+        self.code.add_label(false_label)
+        self.visit_body(tree.orelse)
+
+        # Exit
+        self.code.add_label(exit_label)
 
     def visit_assign(self, tree):
         assert isinstance(tree, ast.Assign)
@@ -104,14 +124,22 @@ class Compiler(object):
 
     def visit_if_exp(self, tree):
         assert isinstance(tree, ast.IfExp)
-        self.visit_expr(tree.test)
         false_label = self.code.new_label()
         exit_label = self.code.new_label()
+
+        # Test
+        self.visit_expr(tree.test)
         self.code.add('cjump', (False, True, false_label))
+
+        # True branch
         self.visit_expr(tree.body)
         self.code.add('jump', exit_label)
+
+        # False branch
         self.code.add_label(false_label)
         self.visit_expr(tree.orelse)
+
+        # Exit
         self.code.add_label(exit_label)
 
     def visit_subscript(self, tree):
@@ -253,24 +281,90 @@ class Compiler(object):
         }[type(op)]
 
     def visit_compare(self, tree):
-        assert isinstance(tree, ast.Compare)
         # TODO: Optimize for simple comparisons
-        label = self.code.new_label()
+        assert isinstance(tree, ast.Compare)
+
+        # Comparisons are lazy-evaluated. `1 < 2 < 3` is semantically equivalent to `1 < 2 and 2 < 3`.
+        # When a comparison evaluates to False, other comparison are not evaluated and the overall result is
+        # False. To achive this, the following is being done:
+        #
+        # 1. An accumulator with the initial value `True` is stored on the stack
+        # 2. For each comparison:
+        # 2.1. It is evaluated
+        # 2.2. The result is being `and`ed with the accumulator (and stored in the accumulator)
+        # 2.3. If the value of the accumulator is False, the loop is stopped and False is returned
+        # 3. If all comparisons evaluated to True, True is returned
+        #
+        # Notation: v0, v1, v2, ... -- compared values (operands)
+        # op1, op2, ... -- comparison operators
+        # acc -- accumulator
+        # lhs, rhs -- operands of the current comparison
+        # result -- result of the current comparison
+        #
+        # The comparison is written in the code this way: `v0 op1 v1 op2 v2 op3 v3 ...`,
+        # e.g. `0 < 1 >= 2 is not 3`
+
+        # Define exit label
+        exit_label = self.code.new_label()
+
+        # Initialize the accumulator.
         self.code.add_const(True)
+        # Stack: ... accum
+
+        # Place the first operand on the stack.
         self.visit_expr(tree.left)
+        # Stack: ... accum v0   (equiv. to: ... accum lhs)
+
+        # Comparison index (from 0 inclusively to len(tree.comparators) not inclusively)
+        # Will be used later
         i = 0
         for op, value in zip(tree.ops, tree.comparators):
+            # Stack: ... accum lhs
+    
+            # Place the right operand of the current comparison
             self.visit_expr(value)
+            # Stack: ... accum lhs rhs
+
+            # Save the current rhs value to use it in the next comparison
             self.code.add('stack', 'dupdown3')
+            # Stack: ... rhs accum lhs rhs
+            
+            # Evaluate the comparison
             self.code.add('binop', self.get_comparison_operator(op))
+            # Stack: ... rhs accum result
+            
+            # `and` the result with the accumulator
             self.code.add('binop', 'and')
-            self.code.add('cjump', (False, False, label))
+            # Stack: ... rhs accum
+
+            # (see 2.3) if the value of accumulator is False, terminate the loop and return False
+            self.code.add('cjump', (False, False, exit_label))
+
             i += 1
+            # If the current comparison is the last one, then we don't need to do anything with the stack
+            # because the exit label expects the values on the stack to have the following
+            # layout: ... some_value accum (which is what we have now). However, the loop beginning
+            # expects the stack to be: ... accum lhs. Thus, if the current comparison is not the last one,
+            # we need to swap the two top values on the stack
             if i != len(tree.ops):
                 self.code.add('stack', 'swap2')
+                # Stack: ... accum rhs
+
+                # If the current comparison was not the last one, current one's `rhs` becomes the next one's `lhs`
+                # Stack: ... accum lhs
+            # Stack [if last]:      ... rhs accum
+            # Stack [if not last]:  ... accum lhs
+
+        # If the loop terminates, code execution will jump here
         self.code.add_label(label)
+        # Stack: ... some_value accum
+
+        # Delete the second top value, which is unneeded
         self.code.add('stack', 'swap2')
+        # Stack: ... accum some_value
         self.code.add('stack', 'pop')
+        # Stack: ... accum
+        # The value of `accum` is the result of the whole Compare node
 
 
     def visit_bin_op(self, tree):
@@ -339,7 +433,7 @@ class Compiler(object):
 
     def visit(self, tree):
         self.code = pykebc.Code()
-        self.visit_module(tree)
+        self.visit_body(tree.body)
         return self.code
 
 
