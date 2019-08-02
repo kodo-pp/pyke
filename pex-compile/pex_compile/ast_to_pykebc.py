@@ -25,6 +25,18 @@ class ContextManager(object):
         self.exit(*args)
 
 
+class TryExcept(object):
+    def __init__(self, body, handlers):
+        self.body = body
+        self.handlers = handlers
+
+
+class TryFinally(object):
+    def __init__(self, body, finalbody):
+        self.body = body
+        self.finalbody = finalbody
+
+
 class Compiler(object):
     __slots__ = ['code', 'loops']
 
@@ -58,9 +70,11 @@ class Compiler(object):
             (ast.Pass,          self.visit_pass),
             #(ast.Raise,         self.visit_raise),
             #(ast.Return,        self.visit_return),
-            #(ast.Try,           self.visit_try),
+            (ast.Try,           self.visit_try),
             (ast.While,         self.visit_while),
             #(ast.With,          self.visit_with),
+            (TryExcept,         self.visit_try_except),
+            (TryFinally,        self.visit_try_finally),
         ]
 
         for Type, func in type_table:
@@ -68,6 +82,75 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+    
+    def visit_try_finally(self, tree):
+        assert isinstance(tree, TryFinally)
+        try_label = self.code.new_label('try-finally_try')
+        finally_label = self.code.new_label('try-finally_finally')
+        exit_label = self.code.new_label('try-finally_exit')
+        
+        self.code.add('try', try_label)
+        #with self.enter_finally(finally_label):
+        self.visit_body(tree.body)
+        self.code.add('end_try', None)
+        self.code.add('finally', (False, finally_label))
+        self.code.add('jump', exit_label)
+
+        self.code.add_label(try_label)
+        self.code.add('finally', (True, finally_label))
+        self.code.add('raise', None)
+        
+        self.code.add_label(finally_label)
+        self.visit_body(tree.finalbody)
+        self.code.add('end_finally', None)
+
+        self.code.add_label(exit_label)
+
+
+    def visit_try_except(self, tree):
+        assert isinstance(tree, TryExcept)
+        try_label = self.code.new_label('try-except_try')
+        exit_label = self.code.new_label('try-except_exit')
+
+        self.code.add('try', try_label)
+        self.visit_body(tree.body)
+        self.code.add('end_try', None)
+        self.code.add('jump', exit_label)
+        
+        self.code.add_label(try_label)
+        except_labels = [self.code.new_label('try-except_handler') for _ in tree.handlers]
+        for handler, label in zip(tree.handlers, except_labels):
+            if handler.type is None:
+                self.code.add('except_all', label)
+            else:
+                self.visit_expr(handler.type)
+                self.code.add('except', label)
+        self.code.add('raise', None)
+
+        for handler, label in zip(tree.handlers, except_labels):
+            self.code.add_label(label)
+            if handler.name is None:
+                self.code.add('stack', 'pop')
+            else:
+                self.code.add('name', ('store', handler.name))
+            self.visit_body(handler.body)
+            self.code.add('jump', exit_label)
+
+        self.code.add_label(exit_label)
+
+    def visit_try(self, tree):
+        assert isinstance(tree, ast.Try)
+        transformed_tree = TryFinally(
+            body = [
+                TryExcept(
+                    body=tree.body,
+                    handlers=tree.handlers,
+                ),
+                *tree.orelse,
+            ],
+            finalbody = tree.finalbody,
+        )
+        self.visit_try_finally(transformed_tree)
 
     def visit_pass(self, tree):
         assert isinstance(tree, ast.Pass)
@@ -75,12 +158,12 @@ class Compiler(object):
 
     def visit_for(self, tree):
         assert isinstance(tree, ast.For)
-        start_label = self.code.new_label()
-        try_label = self.code.new_label()
-        except_label = self.code.new_label()
-        else_label = self.code.new_label()
-        end_label = self.code.new_label()
-        bogus_label = self.code.new_label()
+        start_label = self.code.new_label('for_start')
+        try_label = self.code.new_label('for_try')
+        except_label = self.code.new_label('for_except')
+        else_label = self.code.new_label('for_else')
+        end_label = self.code.new_label('for_end')
+        bogus_label = self.code.new_label('for_bogus')
 
         # Stack: ...
         self.visit_expr(tree.iter)
@@ -139,9 +222,9 @@ class Compiler(object):
 
     def visit_while(self, tree):
         assert isinstance(tree, ast.While)
-        start_label = self.code.new_label()
-        else_label = self.code.new_label()
-        end_label = self.code.new_label()
+        start_label = self.code.new_label('while_start')
+        else_label = self.code.new_label('while_else')
+        end_label = self.code.new_label('while_end')
 
         self.code.add_label(start_label)
         self.visit_expr(tree.test)
@@ -158,8 +241,8 @@ class Compiler(object):
 
     def visit_if(self, tree):
         assert isinstance(tree, ast.If)
-        false_label = self.code.new_label()
-        exit_label = self.code.new_label()
+        false_label = self.code.new_label('if_false')
+        exit_label = self.code.new_label('if_exit')
 
         # Test
         self.visit_expr(tree.test)
@@ -237,8 +320,8 @@ class Compiler(object):
 
     def visit_if_exp(self, tree):
         assert isinstance(tree, ast.IfExp)
-        false_label = self.code.new_label()
-        exit_label = self.code.new_label()
+        false_label = self.code.new_label('if_exp_false')
+        exit_label = self.code.new_label('if_exp_exit')
 
         # Test
         self.visit_expr(tree.test)
@@ -422,7 +505,7 @@ class Compiler(object):
         # e.g. `0 < 1 >= 2 is not 3`
 
         # Define exit label
-        exit_label = self.code.new_label()
+        exit_label = self.code.new_label('comp_exit')
 
         # Initialize the accumulator.
         self.code.add_const(True)
@@ -526,7 +609,7 @@ class Compiler(object):
         else:
             raise Exception(f'Unsupported bool operator type: {type(tree)}')
         self.visit_expr(tree.values[0])
-        label = self.code.new_label()
+        label = self.code.new_label('bool_op_exit')
         for operand in tree.values[1:]:
             # Skip evaluating what is not needed
             self.code.add('cjump', ({'and': False, 'or': True}[op], False, label))

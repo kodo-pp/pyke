@@ -9,8 +9,8 @@ class Code(object):
         self.commands = []
         self.label_counter = 0
 
-    def new_label(self):
-        label_name = f'L{self.label_counter}'
+    def new_label(self, comment=None):
+        label_name = f'L{self.label_counter}{"_" + comment if comment is not None else ""}'
         self.label_counter += 1
         return label_name
 
