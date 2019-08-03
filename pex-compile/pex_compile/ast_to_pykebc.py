@@ -67,7 +67,7 @@ class Compiler(object):
             #(ast.AugAssign,     self.visit_aug_assign),
             (ast.Break,         self.visit_break),
             #(ast.ClassDef,      self.visit_class_def),
-            #(ast.Continue,      self.visit_continue),
+            (ast.Continue,      self.visit_continue),
             #(ast.Delete,        self.visit_delete),
             (ast.Expr,          self.visit_expr),
             (ast.For,           self.visit_for),
@@ -92,6 +92,20 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_continue(self, tree):
+        assert isinstance(tree, ast.Continue)
+        frames = copy.copy(self.frames)
+        while frames:
+            frame = frames.pop()
+            if isinstance(frame, TryFinallyFrame):
+                self.code.add('finally', (False, frame.finally_label))
+            elif isinstance(frame, LoopFrame):
+                self.code.add('jump', frame.start_label)
+                return
+            else:
+                raise Exception(f'Unimplemented frame type: {type(frame)}')
+        raise Exception('Continue outside of loop is not allowed')
 
     def visit_break(self, tree):
         assert isinstance(tree, ast.Break)
