@@ -1,4 +1,5 @@
 import ast
+import copy
 
 from pex_compile import pykebc
 
@@ -64,7 +65,7 @@ class Compiler(object):
             #(ast.Assert,        self.visit_assert),
             (ast.Assign,        self.visit_assign),
             #(ast.AugAssign,     self.visit_aug_assign),
-            #(ast.Break,         self.visit_break),
+            (ast.Break,         self.visit_break),
             #(ast.ClassDef,      self.visit_class_def),
             #(ast.Continue,      self.visit_continue),
             #(ast.Delete,        self.visit_delete),
@@ -91,6 +92,20 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_break(self, tree):
+        assert isinstance(tree, ast.Break)
+        frames = copy.copy(self.frames)
+        while frames:
+            frame = frames.pop()
+            if isinstance(frame, TryFinallyFrame):
+                self.code.add('finally', (False, frame.finally_label))
+            elif isinstance(frame, LoopFrame):
+                self.code.add('jump', frame.end_label)
+                return
+            else:
+                raise Exception(f'Unimplemented frame type: {type(frame)}')
+        raise Exception('Break outside of loop is not allowed')
     
     def visit_try_finally(self, tree):
         assert isinstance(tree, TryFinally)
@@ -571,7 +586,7 @@ class Compiler(object):
             # Stack [if not last]:  ... accum lhs
 
         # If the loop terminates, code execution will jump here
-        self.code.add_label(label)
+        self.code.add_label(exit_label)
         # Stack: ... some_value accum
 
         # Delete the second top value, which is unneeded
