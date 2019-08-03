@@ -68,7 +68,7 @@ class Compiler(object):
             (ast.Break,         self.visit_break),
             #(ast.ClassDef,      self.visit_class_def),
             (ast.Continue,      self.visit_continue),
-            #(ast.Delete,        self.visit_delete),
+            (ast.Delete,        self.visit_delete),
             (ast.Expr,          self.visit_expr),
             (ast.For,           self.visit_for),
             #(ast.FunctionDef,   self.visit_function_def),
@@ -92,6 +92,11 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_delete(self, tree):
+        assert isinstance(tree, ast.Delete)
+        for target in tree.targets:
+            self.visit_expr(target)
 
     def visit_continue(self, tree):
         assert isinstance(tree, ast.Continue)
@@ -454,7 +459,7 @@ class Compiler(object):
             self.code.add('name', ('load', tree.id))
         elif isinstance(tree.ctx, ast.Store):
             self.code.add('name', ('store', tree.id))
-        elif isinstance(tree.ctx, ast.Delete):
+        elif isinstance(tree.ctx, ast.Del):
             self.code.add('name', ('del', tree.id))
         else:
             raise Exception(f'Unimplemented context: {type(tree.ctx)}')
@@ -477,7 +482,7 @@ class Compiler(object):
             self.code.add('eager_unpack_list', len(tree.elts))
             for element in reversed(tree.elts):
                 self.visit_expr(element)
-        elif isinstance(tree.ctx, ast.Delete):
+        elif isinstance(tree.ctx, ast.Del):
             self.code.add('eager_unpack_list', len(tree.elts))
             for element in reversed(tree.elts):
                 self.visit_expr(element)
@@ -494,7 +499,7 @@ class Compiler(object):
             self.code.add('eager_unpack_list', len(tree.elts))
             for element in reversed(tree.elts):
                 self.visit_expr(element)
-        elif isinstance(tree.ctx, ast.Delete):
+        elif isinstance(tree.ctx, ast.Del):
             self.code.add('eager_unpack_list', len(tree.elts))
             for element in reversed(tree.elts):
                 self.visit_expr(element)
@@ -603,7 +608,7 @@ class Compiler(object):
         self.code.add_label(exit_label)
         # Stack: ... some_value accum
 
-        # Delete the second top value, which is unneeded
+        # Del the second top value, which is unneeded
         self.code.add('stack', 'swap2')
         # Stack: ... accum some_value
         self.code.add('stack', 'pop')
