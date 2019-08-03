@@ -436,7 +436,7 @@ class Compiler(object):
             self.code.add('attribute', ('get', self.code.get_const_id(tree.attr)))
         elif isinstance(tree.ctx, ast.Store):
             self.code.add('attribute', ('set', self.code.get_const_id(tree.attr)))
-        elif isinstance(tree.ctx, ast.Delete):
+        elif isinstance(tree.ctx, ast.Del):
             self.code.add('attribute', ('del', self.code.get_const_id(tree.attr)))
         else:
             raise Exception(f'Unimplemented context: {type(tree.ctx)}')
