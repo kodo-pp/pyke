@@ -3,11 +3,20 @@ import ast
 from pex_compile import pykebc
 
 
-class Loop(object):
+class LoopFrame(object):
+    __slots__ = ['start_label', 'else_label', 'end_label']
+
     def __init__(self, start_label, else_label, end_label):
         self.start_label = start_label
         self.else_label = else_label
         self.end_label = end_label
+
+
+class TryFinallyFrame(object):
+    __slots__ = ['finally_label']
+
+    def __init__(self, finally_label):
+        self.finally_label = finally_label
 
 
 class ContextManager(object):
@@ -38,11 +47,11 @@ class TryFinally(object):
 
 
 class Compiler(object):
-    __slots__ = ['code', 'loops']
+    __slots__ = ['code', 'frames']
 
     def __init__(self):
         self.code = None
-        self.loops = []
+        self.frames = None
 
     def visit_body(self, body):
         assert isinstance(body, list)
@@ -90,8 +99,8 @@ class Compiler(object):
         exit_label = self.code.new_label('try-finally_exit')
         
         self.code.add('try', try_label)
-        #with self.enter_finally(finally_label):
-        self.visit_body(tree.body)
+        with self.enter_try_finally(finally_label):
+            self.visit_body(tree.body)
         self.code.add('end_try', None)
         self.code.add('finally', (False, finally_label))
         self.code.add('jump', exit_label)
@@ -105,7 +114,6 @@ class Compiler(object):
         self.code.add('end_finally', None)
 
         self.code.add_label(exit_label)
-
 
     def visit_try_except(self, tree):
         assert isinstance(tree, TryExcept)
@@ -215,9 +223,16 @@ class Compiler(object):
 
     def enter_loop(self, start_label, else_label, end_label):
         def enter():
-            self.loops.append(Loop(start_label, else_label, end_label))
+            self.frames.append(LoopFrame(start_label, else_label, end_label))
         def exit(*args):
-            self.loops.pop()
+            self.frames.pop()
+        return ContextManager(enter, exit)
+
+    def enter_try_finally(self, finally_label):
+        def enter():
+            self.frames.append(TryFinallyFrame(finally_label))
+        def exit(*args):
+            self.frames.pop()
         return ContextManager(enter, exit)
 
     def visit_while(self, tree):
@@ -633,6 +648,7 @@ class Compiler(object):
 
     def visit(self, tree):
         self.code = pykebc.Code()
+        self.frames = []
         self.visit_body(tree.body)
         return self.code
 
