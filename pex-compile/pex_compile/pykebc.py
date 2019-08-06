@@ -2,12 +2,48 @@ def cid(x):
     return type(x), x
 
 
+class Label(object):
+    __slots__ = ['name']
+
+    def __init__(self, name):
+        self.name = name
+
+
+def recursive_map(tree, func):
+    if isinstance(tree, tuple):
+        return tuple((recursive_map(x, func) for x in tree))
+    else:
+        return func(tree)
+
+
+class LinkedCode(object):
+    def __init__(self, type, instructions, constants):
+        self.type = type
+        self.instructions = instructions
+        self.constants = constants
+    
+    def __hash__(self):
+        return hash(('LinkedCode', self.type, self.instructions))
+
+    def __repr__(self):
+        return self.asm()
+
+    def asm(self):
+        cmds = '\n'.join([
+            str(opname) + ('' if arg is None else (' '+str(arg)))
+            for opname, arg in self.instructions
+        ])
+        consts = '\n'.join([str(x) for x in enumerate(self.constants)])
+        return cmds + '\n\n' + consts
+
+
 class Code(object):
-    def __init__(self):
+    def __init__(self, type='module'):
         self.reverse_constants = {}
         self.constants = []
-        self.commands = []
+        self.instructions = []
         self.label_counter = 0
+        self.type = type
 
     def new_label(self, comment=None):
         label_name = f'L{self.label_counter}{"_" + comment if comment is not None else ""}'
@@ -24,15 +60,43 @@ class Code(object):
         self.add('load_const', self.get_const_id(const))
 
     def add(self, command, argument):
-        self.commands.append((command, argument))
+        self.instructions.append((command, argument))
 
     def __repr__(self):
-        return f'Code(commands: {repr(self.commands)}, constants: {repr(self.constants)})'
+        return f'Code(instructions: {repr(self.instructions)}, constants: {repr(self.constants)})'
 
     def asm(self):
-        cmds = '\n'.join([str(opname) + ('' if arg is None else (' '+str(arg))) for opname, arg in self.commands])
+        cmds = '\n'.join([
+            str(opname) + ('' if arg is None else (' '+str(arg)))
+            for opname, arg in self.instructions
+        ])
         consts = '\n'.join([str(x) for x in enumerate(self.constants)])
         return cmds + '\n\n' + consts
 
     def add_label(self, label):
         self.add('DEFINE_LABEL', label)
+
+    def link(self):
+        label_values = {}
+        names_values = {}
+        instructions = []
+        address = 0
+        for command, argument in self.instructions:
+            if command == 'DEFINE_LABEL':
+                assert argument not in label_values
+                label_values[argument] = address
+            else:
+                instructions.append((command, argument))
+                address += 1
+        
+        map_function = lambda x: label_values[x.name] if isinstance(x, Label) else x
+
+        for i, instruction in enumerate(instructions):
+            instructions[i] = recursive_map(instruction, map_function)
+            command, argument = instructions[i]
+            if command == 'name':
+                action, name = argument
+                name_id = self.get_const_id(name)
+                instructions[i] = command, (action, name_id)
+
+        return LinkedCode(type=self.type, instructions=tuple(instructions), constants=self.constants)

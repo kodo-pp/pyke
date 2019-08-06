@@ -71,7 +71,7 @@ class Compiler(object):
             (ast.Delete,        self.visit_delete),
             (ast.Expr,          self.visit_expr),
             (ast.For,           self.visit_for),
-            #(ast.FunctionDef,   self.visit_function_def),
+            (ast.FunctionDef,   self.visit_function_def),
             #(ast.Global,        self.visit_global),
             (ast.If,            self.visit_if),
             #(ast.Import,        self.visit_import),
@@ -92,6 +92,14 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_function_def(self, tree):
+        assert isinstance(tree, ast.FunctionDef)
+        comp = Compiler()
+        function_code = comp.visit(tree, type='function')
+        linked_function_code = function_code.link()
+        self.code.add_const(linked_function_code)
+        self.code.add('name', ('store', tree.name))
 
     def visit_delete(self, tree):
         assert isinstance(tree, ast.Delete)
@@ -680,8 +688,30 @@ class Compiler(object):
         else:
             raise Exception(f'Unsupported unary operator type: {type(tree)}')
 
-    def visit(self, tree):
-        self.code = pykebc.Code()
+    def emit_function_prologue(self, tree):
+        assert isinstance(tree, ast.FunctionDef)
+        for arg in tree.args.args:
+            self.code.add_const(arg.arg)
+        self.code.add_const(len(tree.args.args))
+        for arg in tree.args.defaults:
+            self.visit_expr(arg)
+        self.code.add_const(len(tree.args.defaults))
+        
+        for kwarg, default in zip(tree.args.kwonlyargs, tree.args.kw_defaults):
+            self.code.add_const(kwarg.arg)
+            if default is None:
+                self.code.add_const(False)
+            else:
+                self.code.add_const(True)
+                self.visit_expr(default)
+        self.code.add_const(len(tree.args.kwonlyargs))
+        self.code.add('init_function', None)
+        
+
+    def visit(self, tree, type='module'):
+        self.code = pykebc.Code(type=type)
+        if type == 'function':
+            self.emit_function_prologue(tree)
         self.frames = []
         self.visit_body(tree.body)
         return self.code
