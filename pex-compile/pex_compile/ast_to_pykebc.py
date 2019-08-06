@@ -79,7 +79,7 @@ class Compiler(object):
             #(ast.Nonlocal,      self.visit_nonlocal),
             (ast.Pass,          self.visit_pass),
             #(ast.Raise,         self.visit_raise),
-            #(ast.Return,        self.visit_return),
+            (ast.Return,        self.visit_return),
             (ast.Try,           self.visit_try),
             (ast.While,         self.visit_while),
             #(ast.With,          self.visit_with),
@@ -92,6 +92,14 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+    
+    def visit_return(self, tree):
+        assert isinstance(tree, ast.Return)
+        if tree.value is None:
+            self.code.add_const(None)
+        else:
+            self.visit_expr(tree.value)
+        self.code.add('return', None)
 
     def visit_function_def(self, tree):
         assert isinstance(tree, ast.FunctionDef)
