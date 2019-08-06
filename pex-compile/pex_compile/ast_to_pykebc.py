@@ -78,7 +78,7 @@ class Compiler(object):
             #(ast.ImportFrom,    self.visit_import_from),
             #(ast.Nonlocal,      self.visit_nonlocal),
             (ast.Pass,          self.visit_pass),
-            #(ast.Raise,         self.visit_raise),
+            (ast.Raise,         self.visit_raise),
             (ast.Return,        self.visit_return),
             (ast.Try,           self.visit_try),
             (ast.While,         self.visit_while),
@@ -92,6 +92,20 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+    
+    def visit_raise(self, tree):
+        assert isinstance(tree, ast.Raise)
+        if tree.exc is None:
+            self.code.add('get_exception', None)
+        else:
+            self.visit_expr(tree.exc)
+
+        if tree.cause is not None:
+            self.code.add_const(None)
+            self.code.add('attribute', ('set', self.code.get_const_id('__context__')))
+            self.visit_expr(tree.cause)
+            self.code.add('attribute', ('set', self.code.get_const_id('__cause__')))
+        self.code.add('raise', None)
     
     def visit_return(self, tree):
         assert isinstance(tree, ast.Return)
