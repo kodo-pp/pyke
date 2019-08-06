@@ -8,6 +8,9 @@ class Label(object):
     def __init__(self, name):
         self.name = name
 
+    def __hash__(self):
+        return hash(('Label', self.name))
+
 
 def recursive_map(tree, func):
     if isinstance(tree, tuple):
@@ -48,7 +51,7 @@ class Code(object):
     def new_label(self, comment=None):
         label_name = f'L{self.label_counter}{"_" + comment if comment is not None else ""}'
         self.label_counter += 1
-        return label_name
+        return Label(label_name)
 
     def get_const_id(self, const):
         if cid(const) not in self.reverse_constants:
@@ -89,7 +92,7 @@ class Code(object):
                 instructions.append((command, argument))
                 address += 1
         
-        map_function = lambda x: label_values[x.name] if isinstance(x, Label) else x
+        map_function = lambda x: label_values[x] if isinstance(x, Label) else x
 
         for i, instruction in enumerate(instructions):
             instructions[i] = recursive_map(instruction, map_function)
