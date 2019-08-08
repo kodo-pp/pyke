@@ -66,7 +66,7 @@ class Compiler(object):
             (ast.Assign,        self.visit_assign),
             #(ast.AugAssign,     self.visit_aug_assign),
             (ast.Break,         self.visit_break),
-            #(ast.ClassDef,      self.visit_class_def),
+            (ast.ClassDef,      self.visit_class_def),
             (ast.Continue,      self.visit_continue),
             (ast.Delete,        self.visit_delete),
             (ast.Expr,          self.visit_expr),
@@ -92,6 +92,21 @@ class Compiler(object):
                 func(tree)
                 return
         raise Exception(f'Unimplemented statement type: {type(tree)}')
+
+    def visit_class_def(self, tree):
+        assert isinstance(tree, ast.ClassDef)
+        for base in tree.bases:
+            self.visit_expr(base)
+        # TODO: support keyword args (i.e. metaclasses and their kwargs)
+        #
+        comp = Compiler()
+        class_code = comp.visit(tree, type='class')
+        linked_class_code = class_code.link()
+        self.code.add_const(linked_class_code)
+
+        self.code.add('make_class', len(tree.bases))
+        self.code.add('name', ('store', tree.name))
+
     
     def visit_raise(self, tree):
         assert isinstance(tree, ast.Raise)
