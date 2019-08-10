@@ -666,33 +666,33 @@ class Compiler(object):
         self.visit_expr(tree.left)
         self.visit_expr(tree.right)
         if isinstance(tree.op, ast.Add):
-            self.code.add('binary_op', '+')
+            self.code.add('binop', '+')
         elif isinstance(tree.op, ast.Sub):
-            self.code.add('binary_op', '-')
+            self.code.add('binop', '-')
         elif isinstance(tree.op, ast.Mult):
-            self.code.add('binary_op', '*')
+            self.code.add('binop', '*')
         elif isinstance(tree.op, ast.Div):
-            self.code.add('binary_op', '/')
+            self.code.add('binop', '/')
         elif isinstance(tree.op, ast.FloorDiv):
-            self.code.add('binary_op', '//')
+            self.code.add('binop', '//')
         elif isinstance(tree.op, ast.Mod):
-            self.code.add('binary_op', '%')
+            self.code.add('binop', '%')
         elif isinstance(tree.op, ast.Pow):
-            self.code.add('binary_op', '**')
+            self.code.add('binop', '**')
         elif isinstance(tree.op, ast.LShift):
-            self.code.add('binary_op', '<<')
+            self.code.add('binop', '<<')
         elif isinstance(tree.op, ast.RShift):
-            self.code.add('binary_op', '>>')
+            self.code.add('binop', '>>')
         elif isinstance(tree.op, ast.BitOr):
-            self.code.add('binary_op', '|')
+            self.code.add('binop', '|')
         elif isinstance(tree.op, ast.BitXor):
-            self.code.add('binary_op', '^')
+            self.code.add('binop', '^')
         elif isinstance(tree.op, ast.BitAnd):
-            self.code.add('binary_op', '&')
+            self.code.add('binop', '&')
         elif isinstance(tree.op, ast.MatMult):
-            self.code.add('binary_op', '@')
+            self.code.add('binop', '@')
         else:
-            raise Exception(f'Unsupported unary operator type: {type(tree)}')
+            raise Exception(f'Unsupported binary operator type: {type(tree)}')
 
     def visit_bool_op(self, tree):
         assert isinstance(tree, ast.BoolOp)
@@ -708,20 +708,20 @@ class Compiler(object):
             # Skip evaluating what is not needed
             self.code.add('cjump', ({'and': False, 'or': True}[op], False, label))
             self.visit_expr(operand)
-            self.code.add('binary_op', op)
+            self.code.add('binop', op)
         self.code.add_label(label)
 
     def visit_unary_op(self, tree):
         assert isinstance(tree, ast.UnaryOp)
         self.visit_expr(tree.operand)
         if isinstance(tree.op, ast.UAdd):
-            self.code.add('unary_op', '+')
+            self.code.add('unop', '+')
         elif isinstance(tree.op, ast.USub):
-            self.code.add('unary_op', '-')
+            self.code.add('unop', '-')
         elif isinstance(tree.op, ast.Not):
-            self.code.add('unary_op', '!')
+            self.code.add('unop', '!')
         elif isinstance(tree.op, ast.Invert):
-            self.code.add('unary_op', '~')
+            self.code.add('unop', '~')
         else:
             raise Exception(f'Unsupported unary operator type: {type(tree)}')
 

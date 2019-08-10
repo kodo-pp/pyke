@@ -19,6 +19,279 @@ def recursive_map(tree, func):
         return func(tree)
 
 
+class ByteCompiler(object):
+    COMMANDS = [
+        'nop',
+
+        'attribute',
+        'get_exception',
+        'index',
+        'load_const',
+        'name',
+
+        'eager_unpack_list',
+        'make_struct',
+        'stack',
+        'unpack',
+
+        'binop',
+        'call_function',
+        'pseudo_call',
+        'unop',
+
+        'cjump',
+        'end_finally',
+        'end_try',
+        'except',
+        'except_all',
+        'finally',
+        'jump',
+        'raise',
+        'return',
+        'try',
+
+        'init_function',
+        'make_class',
+    ]
+
+    @staticmethod
+    def argument_attribute(arg):
+        action, num = arg
+        action_id = {
+            'get': 0,
+            'set': 1,
+            'del': 2,
+        }[action]
+        return (num << 2) | action_id
+
+    @staticmethod
+    def argument_binop(arg):
+        operator_id = [
+            '+',
+            '-',
+            '*',
+            '/',
+            '//',
+            '%',
+            '**',
+            '<<',
+            '>>',
+            '|',
+            '^',
+            '&',
+            '@',
+            'and',
+            'or',
+            '==',
+            '!=',
+            '<',
+            '<=',
+            '>',
+            '>=',
+            'is',
+            'is_not',
+            'in',
+            'not_in',
+        ].index(arg)
+        return operator_id
+    
+    @staticmethod
+    def argument_call_function(arg):
+        function_argument_count = arg
+        return function_argument_count
+
+    @staticmethod
+    def argument_cjump(arg):
+        jump_if, pop_value, address = arg
+        return (address << 2) | (pop_value << 1) | jump_if
+
+    @staticmethod
+    def argument_eager_unpack_list(arg):
+        expected_elements_count = arg
+        return expected_elements_count
+
+    @staticmethod
+    def argument_end_finally(arg):
+        return 0
+
+    @staticmethod
+    def argument_end_try(arg):
+        return 0
+
+    @staticmethod
+    def argument_except(arg):
+        address = arg
+        return address
+
+    @staticmethod
+    def argument_except_all(arg):
+        address = arg
+        return address
+
+    @staticmethod
+    def argument_finally(arg):
+        is_handling_exception, address = arg
+        return (address << 1) | is_handling_exception
+
+    @staticmethod
+    def argument_index(arg):
+        action = arg
+        action_id = [
+            'get',
+            'set',
+            'del',
+        ].index(arg)
+        return action_id
+
+    @staticmethod
+    def argument_init_function(arg):
+        return 0
+
+    @staticmethod
+    def argument_jump(arg):
+        address = arg
+        return address
+
+    @staticmethod
+    def argument_load_const(arg):
+        const_id = arg
+        return const_id
+    
+    @staticmethod
+    def argument_make_class(arg):
+        base_classes_count = arg
+        return base_classes_count
+
+    @staticmethod
+    def argument_make_struct(arg):
+        struct, elements_count = arg
+        struct_id = [
+            'list',
+            'tuple',
+            'dict',
+            'set',
+        ].index(struct)
+        return (elements_count << 2) | struct_id
+
+    @staticmethod
+    def argument_name(arg):
+        action, name_id = arg
+        action_id = [
+            'load',
+            'store',
+            'del',
+        ].index(action)
+        return (name_id << 2) | action_id
+
+    @staticmethod
+    def argument_nop(arg):
+        return 0
+
+    @staticmethod
+    def argument_pseudo_call(arg):
+        pseudo_function = arg
+        pseudo_function_id = [
+            'iter',
+            'next',
+        ].index(arg)
+        return pseudo_function_id
+
+    @staticmethod
+    def argument_raise(arg):
+        return 0
+
+    @staticmethod
+    def argument_get_exception(arg):
+        return 0
+
+    @staticmethod
+    def argument_return(arg):
+        return 0
+
+    @staticmethod
+    def argument_stack(arg):
+        action = arg
+        action_id = [
+            'pop',
+            'dup',
+            'dupdown3',
+            'swap2',
+        ].index(arg)
+        return action_id
+
+    @staticmethod
+    def argument_try(arg):
+        address = arg
+        return address
+
+    @staticmethod
+    def argument_unop(arg):
+        unop = arg
+        unop_id = [
+            '+',
+            '-',
+            '!',
+            '~',
+        ].index(unop)
+        return unop_id
+
+    @staticmethod
+    def argument_unpack(arg):
+        unpack_type = arg
+        unpack_type_id = [
+            'dict',
+            'iterable',
+        ].index(unpack_type)
+        return unpack_type_id
+
+    def instructions(self, instructions):
+        return b''.join(self.instruction(instr) for instr in instructions)
+
+    def instruction(self, instruction):
+        command, argument = instruction
+        command_repr = self.COMMANDS.index(command)
+        argument_repr = self.argument(command, argument)
+
+        assert command_repr < 2**8
+        assert argument_repr < 2**24
+        
+        instruction_repr = (argument_repr << 8) | command_repr
+        return instruction_repr.to_bytes(4, 'little')
+
+    def argument(self, command, argument):
+
+        argmap = {
+            'attribute':            self.argument_attribute,
+            'binop':                self.argument_binop,
+            'call_function':        self.argument_call_function,
+            'cjump':                self.argument_cjump,
+            'eager_unpack_list':    self.argument_eager_unpack_list,
+            'end_finally':          self.argument_end_finally,
+            'end_try':              self.argument_end_try,
+            'except':               self.argument_except,
+            'except_all':           self.argument_except_all,
+            'finally':              self.argument_finally,
+            'get_exception':        self.argument_get_exception,
+            'index':                self.argument_index,
+            'init_function':        self.argument_init_function,
+            'jump':                 self.argument_jump,
+            'load_const':           self.argument_load_const,
+            'make_class':           self.argument_make_class,
+            'make_struct':          self.argument_make_struct,
+            'name':                 self.argument_name,
+            'nop':                  self.argument_nop,
+            'pseudo_call':          self.argument_pseudo_call,
+            'raise':                self.argument_raise,
+            'return':               self.argument_return,
+            'stack':                self.argument_stack,
+            'try':                  self.argument_try,
+            'unop':                 self.argument_unop,
+            'unpack':               self.argument_unpack,
+        }
+        assert set(argmap.keys()) == set(self.COMMANDS)
+        return argmap[command](argument)
+        
+
 class LinkedCode(object):
     def __init__(self, type, instructions, constants):
         self.type = type

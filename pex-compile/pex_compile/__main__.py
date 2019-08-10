@@ -50,9 +50,10 @@ def main():
     pyke_bytecode = ast_to_pykebc.translate(tree)
     linked_code = pyke_bytecode.link()
     print(pretty(linked_code))
+    byte_compiler = pykebc.ByteCompiler()
     #pex_file = build_pex.build(pyke_bytecode)
-    #with open(options.output, 'wb') as f:
-    #    f.write(pex_file.to_bytes())
+    with open(options.output, 'wb') as f:
+        f.write(byte_compiler.instructions(linked_code.instructions))
 
 
 if __name__ == '__main__':
