@@ -53,7 +53,7 @@ def main():
     byte_compiler = pykebc.ByteCompiler()
     #pex_file = build_pex.build(pyke_bytecode)
     with open(options.output, 'wb') as f:
-        f.write(byte_compiler.instructions(linked_code.instructions))
+        f.write(byte_compiler.compile(linked_code))
 
 
 if __name__ == '__main__':

@@ -1,3 +1,5 @@
+import struct
+
 def cid(x):
     return type(x), x
 
@@ -17,6 +19,15 @@ def recursive_map(tree, func):
         return tuple((recursive_map(x, func) for x in tree))
     else:
         return func(tree)
+
+
+def find_log(value, base):
+    log = 0
+    x = 1
+    while x <= value:
+        x *= base
+        log += 1
+    return log
 
 
 class ByteCompiler(object):
@@ -53,6 +64,62 @@ class ByteCompiler(object):
         'init_function',
         'make_class',
     ]
+
+    def encode_const(self, value):
+        if isinstance(value, int):
+            return self.encode_int(value)
+        elif isinstance(value, float):
+            return self.encode_float(value)
+        elif isinstance(value, bool):
+            return self.encode_bool(value)
+        elif isinstance(value, complex):
+            return self.encode_complex(value)
+        elif isinstance(value, str):
+            return self.encode_str(value)
+        elif isinstance(value, bytes):
+            return self.encode_bytes(value)
+        elif value is None:
+            return self.encode_none(value)
+        elif isinstance(value, LinkedCode):
+            return self.encode_linked_code(value)
+        else:
+            raise TypeError(f'Invalid constant type: {type(value)}')
+
+    @staticmethod
+    def encode_linked_code(value):
+        bc = ByteCompiler()
+        blob = bc.compile(value)
+        return b'#' + len(blob).to_bytes(8, 'big') + blob
+
+    @staticmethod
+    def encode_int(value):
+        num_bytes = find_log(value, 256)
+        return b'i' + num_bytes.to_bytes(8, 'big') + value.to_bytes(num_bytes, 'big')
+
+    @staticmethod
+    def encode_float(value):
+        return b'f' + struct.pack('d', value)
+
+    @staticmethod
+    def encode_bool(value):
+        return b'0' if value else b'1'
+
+    @staticmethod
+    def encode_none(value):
+        return b'n'
+
+    @staticmethod
+    def encode_complex(value):
+        return b'c' + struct.pack('d', value.real) + struct.pack('d', value.imag)
+
+    @staticmethod
+    def encode_bytes(value):
+        return b'b' + len(value).to_bytes(8, 'big') + value
+
+    @staticmethod
+    def encode_str(value):
+        utf8_encoded = value.encode('utf-8')
+        return b'u' + len(utf8_encoded).to_bytes(8, 'big') + utf8_encoded
 
     @staticmethod
     def argument_attribute(arg):
@@ -255,11 +322,10 @@ class ByteCompiler(object):
         assert command_repr < 2**8
         assert argument_repr < 2**24
         
-        instruction_repr = (argument_repr << 8) | command_repr
-        return instruction_repr.to_bytes(4, 'little')
+        instruction_repr = (command_repr << 24) | argument_repr
+        return instruction_repr.to_bytes(4, 'big')
 
     def argument(self, command, argument):
-
         argmap = {
             'attribute':            self.argument_attribute,
             'binop':                self.argument_binop,
@@ -291,6 +357,10 @@ class ByteCompiler(object):
         assert set(argmap.keys()) == set(self.COMMANDS)
         return argmap[command](argument)
         
+    def compile(self, code):
+        compiled_instructions = len(code.instructions).to_bytes(8, 'big') + self.instructions(code.instructions)
+        compiled_constants = len(code.constants).to_bytes(8, 'big') + b''.join(self.encode_const(c) for c in code.constants)
+        return compiled_instructions + compiled_constants
 
 class LinkedCode(object):
     def __init__(self, type, instructions, constants):
