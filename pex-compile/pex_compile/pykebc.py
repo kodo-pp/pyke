@@ -360,7 +360,8 @@ class ByteCompiler(object):
     def compile(self, code):
         compiled_instructions = len(code.instructions).to_bytes(8, 'big') + self.instructions(code.instructions)
         compiled_constants = len(code.constants).to_bytes(8, 'big') + b''.join(self.encode_const(c) for c in code.constants)
-        return compiled_instructions + compiled_constants
+        compiled_type = ['module', 'function', 'class'].index(code.type).to_bytes(1, 'big')
+        return compiled_type + compiled_instructions + compiled_constants
 
 class LinkedCode(object):
     def __init__(self, type, instructions, constants):
