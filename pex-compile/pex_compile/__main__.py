@@ -2,7 +2,7 @@
 
 from pex_compile import ast_to_pykebc
 from pex_compile import pykebc
-#from pex_compile import build_pex
+from pex_compile import build_pex
 
 import ast
 import dis
@@ -51,9 +51,10 @@ def main():
     linked_code = pyke_bytecode.link()
     print(pretty(linked_code))
     byte_compiler = pykebc.ByteCompiler()
-    #pex_file = build_pex.build(pyke_bytecode)
+    pyke_bytecode = byte_compiler.compile(linked_code)
+    pex_file = build_pex.build(pyke_bytecode)
     with open(options.output, 'wb') as f:
-        f.write(byte_compiler.compile(linked_code))
+        f.write(pex_file)
 
 
 if __name__ == '__main__':
