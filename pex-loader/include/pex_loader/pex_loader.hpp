@@ -22,7 +22,7 @@ public:
 };
 
 
-/// Contains 
+/// Contains information encoded in the early header
 struct EarlyHeaderInfo
 {
     enum class FileType
