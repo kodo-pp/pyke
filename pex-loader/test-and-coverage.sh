@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ ! -e build-cov ]]; then
-    meson setup build-cov
+    meson setup build-cov -Db_coverage=true
 fi
 cd build-cov
 ninja
