@@ -3,6 +3,8 @@ project('pex-loader', 'cpp', version: '0.0.0', default_options: ['cpp_std=c++17'
 
 sources = [
     'src/read_early_header.cpp',
+    'src/util/data_reader.cpp',
+    'src/v0/read_sections.cpp',
 ]
 
 includes = include_directories(

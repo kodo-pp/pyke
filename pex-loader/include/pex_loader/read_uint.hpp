@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 
-namespace pex::uint
+namespace pex::util
 {
 
 /// Read fixed-size unsigned int encoded in big endian
@@ -42,4 +42,4 @@ Uint read_uint(const std::string_view& data)
     return result;
 }
 
-} // namespace pex::uint
+} // namespace pex::util
