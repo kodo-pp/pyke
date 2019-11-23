@@ -94,7 +94,7 @@ class ByteCompiler(object):
     @staticmethod
     def encode_int(value):
         num_bytes = find_log(value, 256)
-        return b'i' + num_bytes.to_bytes(8, 'big') + value.to_bytes(num_bytes, 'big')
+        return b'i' + num_bytes.to_bytes(8, 'big') + value.to_bytes(num_bytes, 'big', signed=True)
 
     @staticmethod
     def encode_float(value):
